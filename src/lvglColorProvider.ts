@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-type LvglColorFormat = 'hex3' | 'hex6' | 'hex8';
+type LvglColorFormat = 'hex3' | 'hex6' | 'hex8' | 'make';
 
 interface OffsetMatch {
   color: vscode.Color;
@@ -9,18 +9,36 @@ interface OffsetMatch {
   start: number;
 }
 
-const LVGL_PATTERNS: ReadonlyArray<{ format: LvglColorFormat; regex: RegExp }> = [
+interface LvglPattern {
+  createOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined;
+  regex: RegExp;
+}
+
+const BYTE_ARGUMENT_PATTERN = '(?:\\d{1,3}|0x[0-9a-fA-F]{1,2})';
+const LV_COLOR_MAKE_REGEX = new RegExp(
+  `\\blv_color_make\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
+  'g',
+);
+const LV_COLOR_MAKE_SINGLE_REGEX = new RegExp(
+  `\\blv_color_make\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
+);
+
+const LVGL_PATTERNS: ReadonlyArray<LvglPattern> = [
   {
-    format: 'hex8',
     regex: /\blv_color_hex\b\s*\(\s*(0x[0-9a-fA-F]{8})\s*\)/g,
+    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex8'),
   },
   {
-    format: 'hex6',
     regex: /\blv_color_hex\b\s*\(\s*(0x[0-9a-fA-F]{6})\s*\)/g,
+    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex6'),
   },
   {
-    format: 'hex3',
     regex: /\blv_color_hex3\b\s*\(\s*(0x[0-9a-fA-F]{3})\s*\)/g,
+    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex3'),
+  },
+  {
+    regex: LV_COLOR_MAKE_REGEX,
+    createOffsetMatch: createMakeOffsetMatch,
   },
 ];
 
@@ -55,20 +73,12 @@ export function findLvglColorsInText(text: string): OffsetMatch[] {
 
     let match: RegExpExecArray | null;
     while ((match = pattern.regex.exec(sanitizedText)) !== null) {
-      const literal = match[1];
-      const start = match.index + match[0].indexOf(literal);
-      const color = parseColorToken(literal, pattern.format);
-
-      if (!color) {
+      const offsetMatch = pattern.createOffsetMatch(match);
+      if (!offsetMatch) {
         continue;
       }
 
-      matches.push({
-        color,
-        end: start + literal.length,
-        format: pattern.format,
-        start,
-      });
+      matches.push(offsetMatch);
 
       if (pattern.regex.lastIndex === match.index) {
         pattern.regex.lastIndex += 1;
@@ -116,6 +126,23 @@ export function parseHex8(token: string): vscode.Color | undefined {
   return parseHex6(`0x${normalized.slice(2)}`);
 }
 
+export function parseLvColorMake(token: string): vscode.Color | undefined {
+  const match = LV_COLOR_MAKE_SINGLE_REGEX.exec(token);
+  if (!match) {
+    return undefined;
+  }
+
+  const red = parseByteLiteral(match[1]);
+  const green = parseByteLiteral(match[2]);
+  const blue = parseByteLiteral(match[3]);
+
+  if (red === undefined || green === undefined || blue === undefined) {
+    return undefined;
+  }
+
+  return new vscode.Color(red / 255, green / 255, blue / 255, 1);
+}
+
 export function toHex6(color: vscode.Color): string {
   return `0x${channelToByteHex(color.red)}${channelToByteHex(color.green)}${channelToByteHex(color.blue)}`;
 }
@@ -144,6 +171,10 @@ export function tryCompressHex6ToHex3(token: string): string | undefined {
 function formatEditedToken(originalToken: string, color: vscode.Color): string {
   const format = detectTokenFormat(originalToken);
 
+  if (format === 'make') {
+    return toLvColorMake(color, prefersHexByteArguments(originalToken));
+  }
+
   if (format === 'hex3') {
     return toHex3(color);
   }
@@ -157,6 +188,10 @@ function formatEditedToken(originalToken: string, color: vscode.Color): string {
 }
 
 function detectTokenFormat(token: string): LvglColorFormat {
+  if (/\blv_color_make\b/.test(token)) {
+    return 'make';
+  }
+
   const normalized = stripHexPrefix(token);
 
   if (/^[0-9A-Fa-f]{3}$/.test(normalized)) {
@@ -170,7 +205,7 @@ function detectTokenFormat(token: string): LvglColorFormat {
   return 'hex6';
 }
 
-function parseColorToken(token: string, format: LvglColorFormat): vscode.Color | undefined {
+function parseColorToken(token: string, format: 'hex3' | 'hex6' | 'hex8'): vscode.Color | undefined {
   if (format === 'hex3') {
     return parseHex3(token);
   }
@@ -182,12 +217,67 @@ function parseColorToken(token: string, format: LvglColorFormat): vscode.Color |
   return parseHex6(token);
 }
 
+function createHexOffsetMatch(match: RegExpExecArray, format: 'hex3' | 'hex6' | 'hex8'): OffsetMatch | undefined {
+  const literal = match[1];
+  const start = match.index + match[0].indexOf(literal);
+  const color = parseColorToken(literal, format);
+
+  if (!color) {
+    return undefined;
+  }
+
+  return {
+    color,
+    end: start + literal.length,
+    format,
+    start,
+  };
+}
+
+function createMakeOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined {
+  const color = parseLvColorMake(match[0]);
+  if (!color) {
+    return undefined;
+  }
+
+  return {
+    color,
+    end: match.index + match[0].length,
+    format: 'make',
+    start: match.index,
+  };
+}
+
 function channelToByteHex(value: number): string {
   return clampToByte(clampUnit(value) * 255).toString(16).toUpperCase().padStart(2, '0');
 }
 
+function channelToByteValue(value: number): number {
+  return clampToByte(clampUnit(value) * 255);
+}
+
 function channelToNibbleHex(value: number): string {
   return Math.round(clampUnit(value) * 15).toString(16).toUpperCase();
+}
+
+function toLvColorMake(color: vscode.Color, useHexByteArguments: boolean): string {
+  const red = channelToByteValue(color.red);
+  const green = channelToByteValue(color.green);
+  const blue = channelToByteValue(color.blue);
+
+  if (useHexByteArguments) {
+    return `lv_color_make(${toByteHexLiteral(red)}, ${toByteHexLiteral(green)}, ${toByteHexLiteral(blue)})`;
+  }
+
+  return `lv_color_make(${red}, ${green}, ${blue})`;
+}
+
+function prefersHexByteArguments(token: string): boolean {
+  return /0x/i.test(token);
+}
+
+function toByteHexLiteral(value: number): string {
+  return `0x${value.toString(16).toUpperCase().padStart(2, '0')}`;
 }
 
 function clampUnit(value: number): number {
@@ -302,4 +392,21 @@ function sanitizeTextForScanning(text: string): string {
 
 function stripHexPrefix(token: string): string {
   return token.startsWith('0x') || token.startsWith('0X') ? token.slice(2) : token;
+}
+
+function parseByteLiteral(token: string): number | undefined {
+  if (/^0x[0-9A-Fa-f]{1,2}$/.test(token)) {
+    return Number.parseInt(token.slice(2), 16);
+  }
+
+  if (!/^\d{1,3}$/.test(token)) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(token, 10);
+  if (value < 0 || value > 255) {
+    return undefined;
+  }
+
+  return value;
 }
