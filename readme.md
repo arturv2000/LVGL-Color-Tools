@@ -88,6 +88,10 @@ For `lv_color_make(...)`, decimal byte literals and hex byte literals are recogn
 
 ```text
 .
+|-- .github/
+|   `-- workflows/
+|       |-- ci.yml
+|       `-- release.yml
 |-- .vscode/
 |   |-- launch.json
 |   `-- tasks.json
@@ -134,6 +138,20 @@ Package a VSIX:
 
 ```bash
 npm run package
+```
+
+## GitHub Actions
+
+The repository includes two workflows:
+
+- `ci.yml` runs on pushes to `master` and on pull requests. It installs dependencies, runs the test suite, builds the VSIX, and uploads the VSIX as a workflow artifact.
+- `release.yml` runs when you push a tag matching `v*`. It installs dependencies, runs the test suite, builds the VSIX, creates a GitHub Release, and uploads the VSIX as a release asset.
+
+Example release flow:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ## Run In VS Code
