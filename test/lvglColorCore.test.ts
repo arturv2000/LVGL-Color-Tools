@@ -115,9 +115,9 @@ test('findLvglColorsInText can enable palette decorators for literal palette cal
 
   assert.equal(matches.length, 3);
   assert.deepEqual(matches.map((match) => match.format), ['palette', 'palette', 'palette']);
-  assert.equal(source.slice(matches[0].start, matches[0].end), 'lv_palette_main(LV_PALETTE_RED)');
-  assert.equal(source.slice(matches[1].start, matches[1].end), 'lv_palette_lighten(LV_PALETTE_BLUE, 2)');
-  assert.equal(source.slice(matches[2].start, matches[2].end), 'lv_palette_darken(LV_PALETTE_GREEN, 0x03)');
+  assert.equal(source.slice(matches[0].start, matches[0].end), 'LV_PALETTE_RED');
+  assert.equal(source.slice(matches[1].start, matches[1].end), 'LV_PALETTE_BLUE');
+  assert.equal(source.slice(matches[2].start, matches[2].end), 'LV_PALETTE_GREEN');
   assertColor(matches[0].color, { red: 244, green: 67, blue: 54 });
   assertColor(matches[1].color, { red: 100, green: 181, blue: 246 });
   assertColor(matches[2].color, { red: 46, green: 125, blue: 50 });

@@ -18,13 +18,17 @@ LV_COLOR_MAKE(255, 170, 0)
 LV_COLOR_MAKE(0xFF, 0xAA, 0x00)
 ```
 
-Optional decorator-only forms:
+![Example Decorations and Color Picker](image1.png)
+
+Optional preview-only palette forms:
 
 ```c
 lv_palette_main(LV_PALETTE_ORANGE)
 lv_palette_lighten(LV_PALETTE_BLUE, 2)
 lv_palette_darken(LV_PALETTE_GREEN, 3)
 ```
+
+![Example Decorations Only](image2.png)
 
 Supported spacing variants:
 
@@ -43,11 +47,11 @@ The extension:
 
 - highlights only the hex token inside supported LVGL hex calls
 - treats `lv_color_make(...)` and `LV_COLOR_MAKE(...)` as full-call color ranges
-- uses the built-in VS Code color picker for editable forms
+- uses the built-in VS Code color picker for editable forms only
 - writes edited values back in uppercase LVGL-compatible syntax
 - preserves the leading byte of `0xAARRGGBB` values while editing only the RGB portion
 - preserves hex-byte style on writeback when the original make call used hex byte arguments
-- can optionally show decorator-only previews for literal palette calls
+- can optionally show preview-only swatches for literal palette calls without opening the color picker
 - ignores unrelated hex literals such as `0xFFA500` outside the supported functions
 
 Examples that should be decorated:
@@ -90,7 +94,7 @@ The extension contributes these settings:
 Behavior of each setting:
 
 - `lvglColorTools.enableColorMakeMacro`: enables or disables support for `LV_COLOR_MAKE(...)`.
-- `lvglColorTools.enablePaletteDecorators`: enables decorator-only previews for `lv_palette_main(...)`, `lv_palette_lighten(...)`, and `lv_palette_darken(...)` when their arguments are literal palette enums and literal levels.
+- `lvglColorTools.enablePaletteDecorators`: enables preview-only swatches for `lv_palette_main(...)`, `lv_palette_lighten(...)`, and `lv_palette_darken(...)` when their arguments are literal palette enums and literal levels.
 
 ## Current Scope
 
@@ -106,7 +110,9 @@ The MVP intentionally does not support:
 
 ## Implementation Notes
 
-The extension uses a `DocumentColorProvider` registered for `c` and `cpp`.
+The extension uses a `DocumentColorProvider` registered for `c` and `cpp` for editable LVGL forms.
+
+Palette previews intentionally use normal editor decorations instead of the color-provider pipeline. This avoids the misleading VS Code color picker behavior for palette expressions while still showing a visible swatch.
 
 Detection is based on lightweight regex scanning plus a small text sanitizer that blanks out comments and quoted strings before matching. That keeps the implementation simple while avoiding the most obvious false positives.
 
@@ -116,7 +122,7 @@ For `lv_color_hex(0xAARRGGBB)`, the highest byte is treated as passthrough metad
 
 For `lv_color_make(...)` and `LV_COLOR_MAKE(...)`, decimal byte literals and hex byte literals are recognized in this version. Color-picker edits rewrite the full call and preserve hex-byte style when the original call used hex byte arguments.
 
-For palette calls, the extension uses the LVGL palette definitions and shows decorators only. Palette expressions intentionally do not offer color picker editing in this version.
+For palette calls, the extension uses the LVGL palette definitions and shows preview-only swatches. Palette expressions intentionally do not offer color picker editing in this version.
 
 ## Project Structure
 
@@ -132,7 +138,8 @@ For palette calls, the extension uses the LVGL palette definitions and shows dec
 |-- src/
 |   |-- extension.ts
 |   |-- lvglColorCore.ts
-|   `-- lvglColorProvider.ts
+|   |-- lvglColorProvider.ts
+|   `-- lvglPaletteDecorator.ts
 |-- test/
 |   `-- lvglColorCore.test.ts
 |-- CHANGELOG.md
@@ -195,7 +202,7 @@ git push origin v0.1.0
 3. Run `npm run compile` or start the watcher.
 4. Press `F5` to launch an Extension Development Host.
 5. Open a C or C++ file containing supported LVGL color calls.
-6. If you want palette decorators, enable `lvglColorTools.enablePaletteDecorators` in settings.
+6. If you want palette swatches, enable `lvglColorTools.enablePaletteDecorators` in settings.
 
 ## Known Limitations
 
@@ -213,3 +220,11 @@ git push origin v0.1.0
 - stronger parsing for edge cases
 - broader numeric literal support if LVGL codebases need it
 - optional project detection for LVGL workspaces
+
+## 🤖 AI Disclosure & Disclaimer
+
+This VS Code extension for **LVGL** was developed as an experiment in AI-driven software creation.
+
+- **Authorship:** Approximately 100% of the codebase was generated using **ChatGPT 5.4** (GPT-5.4 Thinking).
+- **Vetting:** While the core functionality has been tested for standard LVGL workflows, the code has not undergone a full manual security or performance audit.
+- **Usage Warning:** Users are advised to review the extension's behavior within their specific LVGL environment. This project is provided "as-is," and the maintainer is not responsible for any bugs, data loss, or "hallucinations" inherent to AI-generated code.

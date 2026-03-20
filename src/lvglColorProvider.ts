@@ -50,7 +50,7 @@ function getScanOptions(): LvglColorScanOptions {
 
   return {
     enableColorMakeMacro: configuration.get<boolean>('enableColorMakeMacro', true),
-    enablePaletteDecorators: configuration.get<boolean>('enablePaletteDecorators', false),
+    enablePaletteDecorators: false,
   };
 }
 

@@ -32,7 +32,9 @@
     "out/**/*",
     "readme.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "image1.png",
+    "image2.png"
   ],
   "activationEvents": [
     "onLanguage:c",

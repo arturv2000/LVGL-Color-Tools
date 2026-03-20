@@ -368,11 +368,13 @@ function createPaletteMainOffsetMatch(match: RegExpExecArray): OffsetMatch | und
     return undefined;
   }
 
+  const start = match.index + match[0].indexOf(match[1]);
+
   return {
     color,
-    end: match.index + match[0].length,
+    end: start + match[1].length,
     format: 'palette',
-    start: match.index,
+    start,
   };
 }
 
@@ -391,11 +393,13 @@ function createPaletteVariantOffsetMatch(
     return undefined;
   }
 
+  const start = match.index + match[0].indexOf(match[1]);
+
   return {
     color,
-    end: match.index + match[0].length,
+    end: start + match[1].length,
     format: 'palette',
-    start: match.index,
+    start,
   };
 }
 
