@@ -1,0 +1,46 @@
+{
+  "name": "vscode-lvgl-color-tools",
+  "displayName": "LVGL Color Tools",
+  "description": "LVGL-aware color decorators and color picker support for C/C++ projects in VS Code.",
+  "version": "0.1.0",
+  "publisher": "local-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "lvgl",
+    "color",
+    "embedded",
+    "c",
+    "cpp",
+    "vscode"
+  ],
+  "files": [
+    "out/**/*",
+    "readme.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "activationEvents": [
+    "onLanguage:c",
+    "onLanguage:cpp"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.30",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.3.2",
+    "typescript": "^5.8.3"
+  }
+}
