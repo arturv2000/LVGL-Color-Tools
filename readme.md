@@ -93,11 +93,15 @@ For `lv_color_make(...)`, decimal byte literals and hex byte literals are recogn
 |   `-- tasks.json
 |-- src/
 |   |-- extension.ts
+|   |-- lvglColorCore.ts
 |   `-- lvglColorProvider.ts
+|-- test/
+|   `-- lvglColorCore.test.ts
 |-- CHANGELOG.md
 |-- package.json
 |-- readme.md
-`-- tsconfig.json
+|-- tsconfig.json
+`-- tsconfig.test.json
 ```
 
 ## Build
@@ -118,6 +122,12 @@ Watch mode:
 
 ```bash
 npm run watch
+```
+
+Run tests:
+
+```bash
+npm test
 ```
 
 Package a VSIX:
@@ -148,4 +158,4 @@ npm run package
 - LVGL project auto-detection
 - stronger parsing for edge cases
 - preserve mixed per-channel formatting in `lv_color_make(...)`
-- unit tests for parsing and formatting helpers
+- broader numeric literal support if LVGL codebases need it

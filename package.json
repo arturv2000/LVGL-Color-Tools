@@ -43,6 +43,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "compile:test": "tsc -p ./tsconfig.test.json",
+    "test": "npm run compile && npm run compile:test && node --test out-test/test/lvglColorCore.test.js",
     "package": "vsce package"
   },
   "devDependencies": {
