@@ -1,4 +1,4 @@
-export type LvglColorFormat = 'hex3' | 'hex6' | 'hex8' | 'make';
+export type LvglColorFormat = 'hex3' | 'hex6' | 'hex8' | 'makeFunction' | 'makeMacro' | 'palette';
 
 export interface ColorValue {
   alpha: number;
@@ -14,44 +14,154 @@ export interface OffsetMatch {
   start: number;
 }
 
+export interface LvglColorScanOptions {
+  enableColorMakeMacro?: boolean;
+  enablePaletteDecorators?: boolean;
+}
+
 interface LvglPattern {
   createOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined;
   regex: RegExp;
 }
 
+interface PaletteEntry {
+  darken: readonly [string, string, string, string];
+  lighten: readonly [string, string, string, string, string];
+  main: string;
+}
+
+const DEFAULT_SCAN_OPTIONS: Required<LvglColorScanOptions> = {
+  enableColorMakeMacro: true,
+  enablePaletteDecorators: false,
+};
+
 const BYTE_ARGUMENT_PATTERN = '(?:\\d{1,3}|0[xX][0-9a-fA-F]{1,2})';
-const LV_COLOR_MAKE_REGEX = new RegExp(
+const PALETTE_ENUM_PATTERN = 'LV_PALETTE_[A-Z_]+';
+const LV_COLOR_MAKE_FUNCTION_REGEX = new RegExp(
   `\\blv_color_make\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
   'g',
 );
-const LV_COLOR_MAKE_SINGLE_REGEX = new RegExp(
-  `\\blv_color_make\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`
+const LV_COLOR_MAKE_MACRO_REGEX = new RegExp(
+  `\\bLV_COLOR_MAKE\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
+  'g',
 );
+const LV_COLOR_MAKE_SINGLE_REGEX = new RegExp(
+  `\\b(lv_color_make|LV_COLOR_MAKE)\\b\\s*\\(\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`
+);
+const LV_PALETTE_MAIN_REGEX = new RegExp(`\\blv_palette_main\\b\\s*\\(\\s*(${PALETTE_ENUM_PATTERN})\\s*\\)`, 'g');
+const LV_PALETTE_LIGHTEN_REGEX = new RegExp(
+  `\\blv_palette_lighten\\b\\s*\\(\\s*(${PALETTE_ENUM_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
+  'g',
+);
+const LV_PALETTE_DARKEN_REGEX = new RegExp(
+  `\\blv_palette_darken\\b\\s*\\(\\s*(${PALETTE_ENUM_PATTERN})\\s*,\\s*(${BYTE_ARGUMENT_PATTERN})\\s*\\)`,
+  'g',
+);
+const PALETTE_EXPRESSION_REGEX = /\blv_palette_(?:main|lighten|darken)\b/;
 
-const LVGL_PATTERNS: ReadonlyArray<LvglPattern> = [
-  {
-    regex: /\blv_color_hex\b\s*\(\s*(0[xX][0-9a-fA-F]{8})\s*\)/g,
-    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex8'),
+const PALETTE_MAP: Readonly<Record<string, PaletteEntry>> = {
+  LV_PALETTE_RED: {
+    main: '0xF44336',
+    lighten: ['0xEF5350', '0xE57373', '0xEF9A9A', '0xFFCDD2', '0xFFEBEE'],
+    darken: ['0xE53935', '0xD32F2F', '0xC62828', '0xB71C1C'],
   },
-  {
-    regex: /\blv_color_hex\b\s*\(\s*(0[xX][0-9a-fA-F]{6})\s*\)/g,
-    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex6'),
+  LV_PALETTE_PINK: {
+    main: '0xE91E63',
+    lighten: ['0xEC407A', '0xF06292', '0xF48FB1', '0xF8BBD0', '0xFCE4EC'],
+    darken: ['0xD81B60', '0xC2185B', '0xAD1457', '0x880E4F'],
   },
-  {
-    regex: /\blv_color_hex3\b\s*\(\s*(0[xX][0-9a-fA-F]{3})\s*\)/g,
-    createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex3'),
+  LV_PALETTE_PURPLE: {
+    main: '0x9C27B0',
+    lighten: ['0xAB47BC', '0xBA68C8', '0xCE93D8', '0xE1BEE7', '0xF3E5F5'],
+    darken: ['0x8E24AA', '0x7B1FA2', '0x6A1B9A', '0x4A148C'],
   },
-  {
-    regex: LV_COLOR_MAKE_REGEX,
-    createOffsetMatch: createMakeOffsetMatch,
+  LV_PALETTE_DEEP_PURPLE: {
+    main: '0x673AB7',
+    lighten: ['0x7E57C2', '0x9575CD', '0xB39DDB', '0xD1C4E9', '0xEDE7F6'],
+    darken: ['0x5E35B1', '0x512DA8', '0x4527A0', '0x311B92'],
   },
-];
+  LV_PALETTE_INDIGO: {
+    main: '0x3F51B5',
+    lighten: ['0x5C6BC0', '0x7986CB', '0x9FA8DA', '0xC5CAE9', '0xE8EAF6'],
+    darken: ['0x3949AB', '0x303F9F', '0x283593', '0x1A237E'],
+  },
+  LV_PALETTE_BLUE: {
+    main: '0x2196F3',
+    lighten: ['0x42A5F5', '0x64B5F6', '0x90CAF9', '0xBBDEFB', '0xE3F2FD'],
+    darken: ['0x1E88E5', '0x1976D2', '0x1565C0', '0x0D47A1'],
+  },
+  LV_PALETTE_LIGHT_BLUE: {
+    main: '0x03A9F4',
+    lighten: ['0x29B6F6', '0x4FC3F7', '0x81D4FA', '0xB3E5FC', '0xE1F5FE'],
+    darken: ['0x039BE5', '0x0288D1', '0x0277BD', '0x01579B'],
+  },
+  LV_PALETTE_CYAN: {
+    main: '0x00BCD4',
+    lighten: ['0x26C6DA', '0x4DD0E1', '0x80DEEA', '0xB2EBF2', '0xE0F7FA'],
+    darken: ['0x00ACC1', '0x0097A7', '0x00838F', '0x006064'],
+  },
+  LV_PALETTE_TEAL: {
+    main: '0x009688',
+    lighten: ['0x26A69A', '0x4DB6AC', '0x80CBC4', '0xB2DFDB', '0xE0F2F1'],
+    darken: ['0x00897B', '0x00796B', '0x00695C', '0x004D40'],
+  },
+  LV_PALETTE_GREEN: {
+    main: '0x4CAF50',
+    lighten: ['0x66BB6A', '0x81C784', '0xA5D6A7', '0xC8E6C9', '0xE8F5E9'],
+    darken: ['0x43A047', '0x388E3C', '0x2E7D32', '0x1B5E20'],
+  },
+  LV_PALETTE_LIGHT_GREEN: {
+    main: '0x8BC34A',
+    lighten: ['0x9CCC65', '0xAED581', '0xC5E1A5', '0xDCEDC8', '0xF1F8E9'],
+    darken: ['0x7CB342', '0x689F38', '0x558B2F', '0x33691E'],
+  },
+  LV_PALETTE_LIME: {
+    main: '0xCDDC39',
+    lighten: ['0xD4E157', '0xDCE775', '0xE6EE9C', '0xF0F4C3', '0xF9FBE7'],
+    darken: ['0xC0CA33', '0xAFB42B', '0x9E9D24', '0x827717'],
+  },
+  LV_PALETTE_YELLOW: {
+    main: '0xFFEB3B',
+    lighten: ['0xFFEE58', '0xFFF176', '0xFFF59D', '0xFFF9C4', '0xFFFDE7'],
+    darken: ['0xFDD835', '0xFBC02D', '0xF9A825', '0xF57F17'],
+  },
+  LV_PALETTE_AMBER: {
+    main: '0xFFC107',
+    lighten: ['0xFFCA28', '0xFFD54F', '0xFFE082', '0xFFECB3', '0xFFF8E1'],
+    darken: ['0xFFB300', '0xFFA000', '0xFF8F00', '0xFF6F00'],
+  },
+  LV_PALETTE_ORANGE: {
+    main: '0xFF9800',
+    lighten: ['0xFFA726', '0xFFB74D', '0xFFCC80', '0xFFE0B2', '0xFFF3E0'],
+    darken: ['0xFB8C00', '0xF57C00', '0xEF6C00', '0xE65100'],
+  },
+  LV_PALETTE_DEEP_ORANGE: {
+    main: '0xFF5722',
+    lighten: ['0xFF7043', '0xFF8A65', '0xFFAB91', '0xFFCCBC', '0xFBE9E7'],
+    darken: ['0xF4511E', '0xE64A19', '0xD84315', '0xBF360C'],
+  },
+  LV_PALETTE_BROWN: {
+    main: '0x795548',
+    lighten: ['0x8D6E63', '0xA1887F', '0xBCAAA4', '0xD7CCC8', '0xEFEBE9'],
+    darken: ['0x6D4C41', '0x5D4037', '0x4E342E', '0x3E2723'],
+  },
+  LV_PALETTE_BLUE_GREY: {
+    main: '0x607D8B',
+    lighten: ['0x78909C', '0x90A4AE', '0xB0BEC5', '0xCFD8DC', '0xECEFF1'],
+    darken: ['0x546E7A', '0x455A64', '0x37474F', '0x263238'],
+  },
+  LV_PALETTE_GREY: {
+    main: '0x9E9E9E',
+    lighten: ['0xBDBDBD', '0xE0E0E0', '0xEEEEEE', '0xF5F5F5', '0xFAFAFA'],
+    darken: ['0x757575', '0x616161', '0x424242', '0x212121'],
+  },
+};
 
-export function findLvglColorsInText(text: string): OffsetMatch[] {
+export function findLvglColorsInText(text: string, options?: LvglColorScanOptions): OffsetMatch[] {
   const sanitizedText = sanitizeTextForScanning(text);
   const matches: OffsetMatch[] = [];
 
-  for (const pattern of LVGL_PATTERNS) {
+  for (const pattern of getLvglPatterns(options)) {
     pattern.regex.lastIndex = 0;
 
     let match: RegExpExecArray | null;
@@ -115,9 +225,9 @@ export function parseLvColorMake(token: string): ColorValue | undefined {
     return undefined;
   }
 
-  const red = parseByteLiteral(match[1]);
-  const green = parseByteLiteral(match[2]);
-  const blue = parseByteLiteral(match[3]);
+  const red = parseByteLiteral(match[2]);
+  const green = parseByteLiteral(match[3]);
+  const blue = parseByteLiteral(match[4]);
 
   if (red === undefined || green === undefined || blue === undefined) {
     return undefined;
@@ -156,11 +266,15 @@ export function tryCompressHex6ToHex3(token: string): string | undefined {
   return undefined;
 }
 
-export function formatEditedToken(originalToken: string, color: ColorValue): string {
+export function formatEditedToken(originalToken: string, color: ColorValue): string | undefined {
   const format = detectTokenFormat(originalToken);
 
-  if (format === 'make') {
-    return toLvColorMake(color, prefersHexByteArguments(originalToken));
+  if (format === 'palette') {
+    return undefined;
+  }
+
+  if (format === 'makeFunction' || format === 'makeMacro') {
+    return toLvColorMake(color, prefersHexByteArguments(originalToken), format === 'makeMacro');
   }
 
   if (format === 'hex3') {
@@ -175,9 +289,21 @@ export function formatEditedToken(originalToken: string, color: ColorValue): str
   return toHex6(color);
 }
 
+export function isPaletteExpression(token: string): boolean {
+  return PALETTE_EXPRESSION_REGEX.test(token);
+}
+
 function detectTokenFormat(token: string): LvglColorFormat {
+  if (/\bLV_COLOR_MAKE\b/.test(token)) {
+    return 'makeMacro';
+  }
+
   if (/\blv_color_make\b/.test(token)) {
-    return 'make';
+    return 'makeFunction';
+  }
+
+  if (isPaletteExpression(token)) {
+    return 'palette';
   }
 
   const normalized = stripHexPrefix(token);
@@ -222,7 +348,7 @@ function createHexOffsetMatch(match: RegExpExecArray, format: 'hex3' | 'hex6' | 
   };
 }
 
-function createMakeOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined {
+function createMakeOffsetMatch(match: RegExpExecArray, format: 'makeFunction' | 'makeMacro'): OffsetMatch | undefined {
   const color = parseLvColorMake(match[0]);
   if (!color) {
     return undefined;
@@ -231,9 +357,123 @@ function createMakeOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined 
   return {
     color,
     end: match.index + match[0].length,
-    format: 'make',
+    format,
     start: match.index,
   };
+}
+
+function createPaletteMainOffsetMatch(match: RegExpExecArray): OffsetMatch | undefined {
+  const color = resolvePaletteColor(match[1], 'main');
+  if (!color) {
+    return undefined;
+  }
+
+  return {
+    color,
+    end: match.index + match[0].length,
+    format: 'palette',
+    start: match.index,
+  };
+}
+
+function createPaletteVariantOffsetMatch(
+  match: RegExpExecArray,
+  variant: 'darken' | 'lighten',
+  maxLevel: 4 | 5,
+): OffsetMatch | undefined {
+  const level = parseByteLiteral(match[2]);
+  if (level === undefined || level < 1 || level > maxLevel) {
+    return undefined;
+  }
+
+  const color = resolvePaletteColor(match[1], variant, level);
+  if (!color) {
+    return undefined;
+  }
+
+  return {
+    color,
+    end: match.index + match[0].length,
+    format: 'palette',
+    start: match.index,
+  };
+}
+
+function getLvglPatterns(options?: LvglColorScanOptions): LvglPattern[] {
+  const resolved = resolveScanOptions(options);
+  const patterns: LvglPattern[] = [
+    {
+      regex: /\blv_color_hex\b\s*\(\s*(0[xX][0-9a-fA-F]{8})\s*\)/g,
+      createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex8'),
+    },
+    {
+      regex: /\blv_color_hex\b\s*\(\s*(0[xX][0-9a-fA-F]{6})\s*\)/g,
+      createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex6'),
+    },
+    {
+      regex: /\blv_color_hex3\b\s*\(\s*(0[xX][0-9a-fA-F]{3})\s*\)/g,
+      createOffsetMatch: (match) => createHexOffsetMatch(match, 'hex3'),
+    },
+    {
+      regex: LV_COLOR_MAKE_FUNCTION_REGEX,
+      createOffsetMatch: (match) => createMakeOffsetMatch(match, 'makeFunction'),
+    },
+  ];
+
+  if (resolved.enableColorMakeMacro) {
+    patterns.push({
+      regex: LV_COLOR_MAKE_MACRO_REGEX,
+      createOffsetMatch: (match) => createMakeOffsetMatch(match, 'makeMacro'),
+    });
+  }
+
+  if (resolved.enablePaletteDecorators) {
+    patterns.push(
+      {
+        regex: LV_PALETTE_MAIN_REGEX,
+        createOffsetMatch: createPaletteMainOffsetMatch,
+      },
+      {
+        regex: LV_PALETTE_LIGHTEN_REGEX,
+        createOffsetMatch: (match) => createPaletteVariantOffsetMatch(match, 'lighten', 5),
+      },
+      {
+        regex: LV_PALETTE_DARKEN_REGEX,
+        createOffsetMatch: (match) => createPaletteVariantOffsetMatch(match, 'darken', 4),
+      },
+    );
+  }
+
+  return patterns;
+}
+
+function resolveScanOptions(options?: LvglColorScanOptions): Required<LvglColorScanOptions> {
+  return {
+    enableColorMakeMacro: options?.enableColorMakeMacro ?? DEFAULT_SCAN_OPTIONS.enableColorMakeMacro,
+    enablePaletteDecorators: options?.enablePaletteDecorators ?? DEFAULT_SCAN_OPTIONS.enablePaletteDecorators,
+  };
+}
+
+function resolvePaletteColor(
+  paletteName: string,
+  variant: 'darken' | 'lighten' | 'main',
+  level?: number,
+): ColorValue | undefined {
+  const entry = PALETTE_MAP[paletteName];
+  if (!entry) {
+    return undefined;
+  }
+
+  if (variant === 'main') {
+    return parseHex6(entry.main);
+  }
+
+  if (!level) {
+    return undefined;
+  }
+
+  const token = variant === 'lighten' ? entry.lighten[level - 1] : entry.darken[level - 1];
+  return parseHex6(token);
 }
 
 function channelToByteHex(value: number): string {
@@ -248,16 +488,17 @@ function channelToNibbleHex(value: number): string {
   return Math.round(clampUnit(value) * 15).toString(16).toUpperCase();
 }
 
-function toLvColorMake(color: ColorValue, useHexByteArguments: boolean): string {
+function toLvColorMake(color: ColorValue, useHexByteArguments: boolean, useMacroName: boolean): string {
+  const name = useMacroName ? 'LV_COLOR_MAKE' : 'lv_color_make';
   const red = channelToByteValue(color.red);
   const green = channelToByteValue(color.green);
   const blue = channelToByteValue(color.blue);
 
   if (useHexByteArguments) {
-    return `lv_color_make(${toByteHexLiteral(red)}, ${toByteHexLiteral(green)}, ${toByteHexLiteral(blue)})`;
+    return `${name}(${toByteHexLiteral(red)}, ${toByteHexLiteral(green)}, ${toByteHexLiteral(blue)})`;
   }
 
-  return `lv_color_make(${red}, ${green}, ${blue})`;
+  return `${name}(${red}, ${green}, ${blue})`;
 }
 
 function prefersHexByteArguments(token: string): boolean {

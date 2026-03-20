@@ -39,6 +39,23 @@
     "onLanguage:cpp"
   ],
   "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "LVGL Color Tools",
+      "properties": {
+        "lvglColorTools.enableColorMakeMacro": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable color decorators and picker editing for LV_COLOR_MAKE(r, g, b)."
+        },
+        "lvglColorTools.enablePaletteDecorators": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable decorator-only support for lv_palette_main, lv_palette_lighten, and lv_palette_darken with literal arguments."
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

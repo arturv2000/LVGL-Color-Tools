@@ -4,9 +4,9 @@ LVGL-aware color decorators and color picker editing for C and C++ files in Visu
 
 ## What It Does
 
-This extension recognizes supported LVGL color helper calls and lets VS Code show native color decorators only on the hex argument, not on unrelated numeric literals.
+This extension recognizes supported LVGL color helper calls and lets VS Code show native color decorators only on the intended LVGL color expressions, not on unrelated numeric literals.
 
-Supported patterns in the MVP:
+Supported editable forms:
 
 ```c
 lv_color_hex(0xFFA500)
@@ -14,6 +14,16 @@ lv_color_hex(0xFFAA5500)
 lv_color_hex3(0xFA5)
 lv_color_make(255, 170, 0)
 lv_color_make(0xFF, 0xAA, 0x00)
+LV_COLOR_MAKE(255, 170, 0)
+LV_COLOR_MAKE(0xFF, 0xAA, 0x00)
+```
+
+Optional decorator-only forms:
+
+```c
+lv_palette_main(LV_PALETTE_ORANGE)
+lv_palette_lighten(LV_PALETTE_BLUE, 2)
+lv_palette_darken(LV_PALETTE_GREEN, 3)
 ```
 
 Supported spacing variants:
@@ -23,7 +33,8 @@ lv_color_hex(  0xFFA500 )
 lv_color_hex( 0xFFAA5500 )
 lv_color_hex3(0xFA5 )
 lv_color_make( 255, 170, 0 )
-lv_color_make( 0xFF, 0xAA, 0x00 )
+LV_COLOR_MAKE( 0xFF, 0xAA, 0x00 )
+lv_palette_lighten( LV_PALETTE_BLUE, 2 )
 ```
 
 ## Behavior
@@ -31,11 +42,12 @@ lv_color_make( 0xFF, 0xAA, 0x00 )
 The extension:
 
 - highlights only the hex token inside supported LVGL hex calls
-- treats `lv_color_make(...)` as a full-call color range
-- uses the built-in VS Code color picker
+- treats `lv_color_make(...)` and `LV_COLOR_MAKE(...)` as full-call color ranges
+- uses the built-in VS Code color picker for editable forms
 - writes edited values back in uppercase LVGL-compatible syntax
 - preserves the leading byte of `0xAARRGGBB` values while editing only the RGB portion
-- preserves hex-byte `lv_color_make(...)` style on writeback when the original call used hex byte arguments
+- preserves hex-byte style on writeback when the original make call used hex byte arguments
+- can optionally show decorator-only previews for literal palette calls
 - ignores unrelated hex literals such as `0xFFA500` outside the supported functions
 
 Examples that should be decorated:
@@ -47,6 +59,10 @@ lv_color_t soft = lv_color_hex( 0xAABBCC );
 lv_color_t shortc = lv_color_hex3(0xFA5);
 lv_color_t made_dec = lv_color_make(255, 170, 0);
 lv_color_t made_hex = lv_color_make(0xFF, 0xAA, 0x00);
+lv_color_t macro_dec = LV_COLOR_MAKE(255, 170, 0);
+lv_color_t macro_hex = LV_COLOR_MAKE(0xFF, 0xAA, 0x00);
+lv_color_t palette_main = lv_palette_main(LV_PALETTE_ORANGE);
+lv_color_t palette_light = lv_palette_lighten(LV_PALETTE_BLUE, 2);
 ```
 
 Examples that should not be decorated:
@@ -57,8 +73,24 @@ uint32_t mask = 0xFFA500;
 foo(0xABCDEF);
 foo(255, 170, 0);
 "lv_color_hex(0xFFA500)"
-/* lv_color_make(0xFF, 0xAA, 0x00) */
+/* LV_COLOR_MAKE(0xFF, 0xAA, 0x00) */
 ```
+
+## Extension Settings
+
+The extension contributes these settings:
+
+```json
+{
+  "lvglColorTools.enableColorMakeMacro": true,
+  "lvglColorTools.enablePaletteDecorators": false
+}
+```
+
+Behavior of each setting:
+
+- `lvglColorTools.enableColorMakeMacro`: enables or disables support for `LV_COLOR_MAKE(...)`.
+- `lvglColorTools.enablePaletteDecorators`: enables decorator-only previews for `lv_palette_main(...)`, `lv_palette_lighten(...)`, and `lv_palette_darken(...)` when their arguments are literal palette enums and literal levels.
 
 ## Current Scope
 
@@ -67,10 +99,10 @@ The MVP intentionally does not support:
 - nested macros
 - computed expressions
 - variables passed to LVGL color helpers
-- palette enums such as `LV_PALETTE_RED`
-- theme-derived colors
+- palette editing through the color picker
+- non-literal arguments inside `lv_color_make(...)` or `LV_COLOR_MAKE(...)`
+- non-literal palette enums or computed palette levels
 - custom wrapper macros or functions
-- non-literal arguments inside `lv_color_make(...)`
 
 ## Implementation Notes
 
@@ -82,7 +114,9 @@ For `lv_color_hex3(...)`, edited colors are quantized back to 12-bit RGB so the 
 
 For `lv_color_hex(0xAARRGGBB)`, the highest byte is treated as passthrough metadata. The color preview and picker use only `RRGGBB`, and edited values keep the original `AA` byte unchanged.
 
-For `lv_color_make(...)`, decimal byte literals and hex byte literals are recognized in this version. Color-picker edits rewrite the full call and preserve hex-byte style when the original call used hex byte arguments.
+For `lv_color_make(...)` and `LV_COLOR_MAKE(...)`, decimal byte literals and hex byte literals are recognized in this version. Color-picker edits rewrite the full call and preserve hex-byte style when the original call used hex byte arguments.
+
+For palette calls, the extension uses the LVGL palette definitions and shows decorators only. Palette expressions intentionally do not offer color picker editing in this version.
 
 ## Project Structure
 
@@ -161,6 +195,7 @@ git push origin v0.1.0
 3. Run `npm run compile` or start the watcher.
 4. Press `F5` to launch an Extension Development Host.
 5. Open a C or C++ file containing supported LVGL color calls.
+6. If you want palette decorators, enable `lvglColorTools.enablePaletteDecorators` in settings.
 
 ## Known Limitations
 
@@ -168,12 +203,13 @@ git push origin v0.1.0
 - The comment/string sanitizer is intentionally lightweight and may not cover every edge case in preprocessor-heavy code.
 - `lv_color_hex3(...)` edits are rounded to the nearest representable 12-bit color.
 - `0xAARRGGBB` support treats `AA` as preserved metadata rather than an editable alpha channel.
-- `lv_color_make(...)` still requires literal channel values in the range `0..255` or `0x00..0xFF`.
+- Palette support is preview-only and requires literal palette arguments.
+- `lv_palette_lighten(...)` and `lv_palette_darken(...)` only accept literal levels in the LVGL-documented ranges.
 
 ## Next Improvements
 
-- configurable function names
-- LVGL project auto-detection
+- configurable function lists instead of boolean feature toggles only
+- preserve mixed per-channel formatting in `lv_color_make(...)` and `LV_COLOR_MAKE(...)`
 - stronger parsing for edge cases
-- preserve mixed per-channel formatting in `lv_color_make(...)`
 - broader numeric literal support if LVGL codebases need it
+- optional project detection for LVGL workspaces
